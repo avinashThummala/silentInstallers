@@ -9,37 +9,34 @@ import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.message.BasicNameValuePair;
 
-public class SilentInstaller extends javax.swing.JFrame
+public class SilentAgentInstaller extends javax.swing.JFrame
 {
-    private String command, callbackUrl, fName;
+    private String command, callbackFUrl, callbackUFUrl, param;
     private boolean cFinished=false;
+    private int exitValue=-1;
 
     private javax.swing.JButton cButton;
     private javax.swing.JButton fButton;
     private javax.swing.JLabel logoLabel;
     private javax.swing.JProgressBar progressBar;    
 
-    public SilentInstaller() 
-    {
+    public SilentAgentInstaller() 
+    {  	
         initComponents();
         readProperties();
         executeCommand();
+        
+        setVisible(true);        
 
-        updateProgressBar();
+        updateProgressBar();        
     } 
 
     public void updateProgressBar()
     {
-        int progress=0;
+    	ProgressUpdater task = new ProgressUpdater();
 
-        while(!cFinished)
-        {
-            progressBar.setValue(progress);
-            progress=(progress+1)%101;
-        }
-
-        finishInstallation();
-
+        Thread executorThread = new Thread(task);
+        executorThread.start(); 
     }
 
     public void executeCommand()
@@ -56,7 +53,7 @@ public class SilentInstaller extends javax.swing.JFrame
 
         try
         {
-            InputStream inputStream = getClass().getResourceAsStream("/cConfig.properties");
+            InputStream inputStream = getClass().getResourceAsStream("/config.properties");
 
             if(inputStream!=null)
                 prop.load(inputStream);              
@@ -67,17 +64,20 @@ public class SilentInstaller extends javax.swing.JFrame
         }
  
         command = prop.getProperty("Command");
-        callbackUrl = prop.getProperty("CallbackUrl");
-        fName = prop.getProperty("Param");
+        
+        callbackFUrl = prop.getProperty("CallbackFinishedUrl");
+        callbackUFUrl = prop.getProperty("CallbackUnFinishedUrl");
+        
+        param = prop.getProperty("Param");
     }
-
-    public void postData()
+    
+    public void postData(String url)
     {
         HttpClient httpclient = HttpClients.createDefault();
-        HttpPost httppost = new HttpPost(callbackUrl);
+        HttpPost httppost = new HttpPost(url);
 
         List<NameValuePair> params = new ArrayList<NameValuePair>(1);
-        params.add(new BasicNameValuePair("fName", fName));
+        params.add(new BasicNameValuePair("param", param));
 
         try
         {
@@ -93,9 +93,20 @@ public class SilentInstaller extends javax.swing.JFrame
 
     public void finishInstallation()
     {
-        progressBar.setValue(100);
-        fButton.setEnabled(true);
-        postData();
+    	if(exitValue==0)
+    	{
+	        progressBar.setValue(100);
+	        fButton.setEnabled(true);
+	        
+	        postData(callbackFUrl);
+    	}
+    	else
+    	{
+	        progressBar.setValue(0);
+	        javax.swing.JOptionPane.showMessageDialog(this, "The Installation can't be completed.\nError code: "+exitValue);
+	        
+	        postData(callbackUFUrl);	        
+    	}
     }
 
     private void initComponents() 
@@ -179,6 +190,34 @@ public class SilentInstaller extends javax.swing.JFrame
     {
         this.dispatchEvent(new java.awt.event.WindowEvent(this, java.awt.event.WindowEvent.WINDOW_CLOSING));          
     }
+    
+    class ProgressUpdater implements Runnable{
+
+        @Override
+        public void run() 
+        {
+            int progress=0;
+
+            try
+            {
+	            while(!cFinished)
+	            {
+	                progressBar.setValue(progress);
+	                progress=(progress+1)%101;
+	                
+	                Thread.sleep(400);
+	            }
+	
+	            finishInstallation();
+            }
+            catch(Exception ex)
+            {
+            	ex.printStackTrace();
+            }
+            
+        }
+
+    }    
 
     class CommandExecutor implements Runnable{
 
@@ -188,14 +227,18 @@ public class SilentInstaller extends javax.swing.JFrame
             Process process = null;
 
             try 
-            {
+            {            	
                 process = Runtime.getRuntime().exec(command);
                 process.waitFor();
-
+                
+                exitValue=process.exitValue();
                 cFinished=true;
             }
             catch (Exception e) 
             {
+                exitValue=-1;
+                cFinished=true;
+                
                 e.printStackTrace();
             }
 
@@ -221,13 +264,14 @@ public class SilentInstaller extends javax.swing.JFrame
         } 
         catch (Exception ex)
         {
-            java.util.logging.Logger.getLogger(SilentInstaller.class.getName()).log(java.util.logging.Level.SEVERE, null, ex);
+        	ex.printStackTrace();
+            java.util.logging.Logger.getLogger(SilentAgentInstaller.class.getName()).log(java.util.logging.Level.SEVERE, null, ex);
         }
 
         java.awt.EventQueue.invokeLater(new Runnable() {
 
             public void run() {
-                new SilentInstaller().setVisible(true);
+                new SilentAgentInstaller();
             }
         });
 

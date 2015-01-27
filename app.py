@@ -15,10 +15,14 @@ app.config.from_object(__name__)
 app.config['PROBE_INSTALLER_PATH'] = 'ProbeInstaller/'
 app.config['AGENT_INSTALLER_PATH'] = 'AgentInstaller/'
 
+app.config['PROBE_BAT_INSTALLER'] = 'probeInstall.bat'
+app.config['AGENT_BAT_INSTALLER'] = 'agentInstall.bat'
+
 app.config['PROBE_INSTALLER_CONFIG_FILE_PATH'] = 'ProbeInstaller/config.properties'
 app.config['AGENT_INSTALLER_CONFIG_FILE_PATH'] = 'AgentInstaller/config.properties'
 
-app.config['CallbackUrl']='127.0.0.1:5000/installFinished'
+app.config['CallbackFinishedUrl']='https://silent-installer-generator.herokuapp.com/installFinished'
+app.config['CallbackUnFinishedUrl']='https://silent-installer-generator.herokuapp.com/installIncomplete'
 
 @app.route("/")
 def index():
@@ -41,36 +45,56 @@ def installFinished():
 
     if request.method == 'POST':  
 
-        fName=request.form['fName']
+        fName=request.form['param']+".tar.gz"
 
-        os.remove(fName)
+        if os.path.isfile(fName):
+            os.remove(fName)
 
         return jsonify({"success":True}) 
 
-    return jsonify({"success":False})           
+    return jsonify({"success":False})    
+
+@app.route('/installIncomplete', methods=['POST'])
+def installIncomplete():
+
+    if request.method == 'POST':  
+
+        fName=request.form['param']+".tar.gz"    	
+
+        print "End user who downloaded "+fName+" couldn't get the installation to work"
+
+        return jsonify({"success":True}) 
+
+    return jsonify({"success":False})             
 
 @app.route('/probeUploadInfo', methods=['POST'])
 def probeUploadInfo():
 
     if request.method == 'POST':
 
-        command="WindowsProbeSetup.exe /s /v\" /qn "  
+        command="cmd /c WindowsProbeSetup.exe /s /v\" /qn "  
 
         for key, value in request.form.items():
             command+=(key+"="+value+" ")
 
         command+="\""
 
-        fName=str(int(time.time()))+".tar.gz"
+        param=str(int(time.time()))
+        fName=param+".tar.gz"
 
         with open(app.config['PROBE_INSTALLER_CONFIG_FILE_PATH'], 'w') as cFile:
 
             cFile.write("Command="+command+"\n")
-            cFile.write("CallbackUrl="+app.config['CallbackUrl']+"\n")
-            cFile.write("Param="+fName+"\n") 
 
-        with tarfile.open(fName, "w:gz") as tar:        
+            cFile.write("CallbackFinishedUrl="+app.config['CallbackFinishedUrl']+"\n")
+            cFile.write("CallbackUnFinishedUrl="+app.config['CallbackUnFinishedUrl']+"\n")
+
+            cFile.write("Param="+param+"\n") 
+
+        with tarfile.open(fName, "w:gz") as tar:     
+
             tar.add(app.config['PROBE_INSTALLER_PATH'], arcname=None,  recursive=True)                     
+            tar.add(app.config['PROBE_BAT_INSTALLER'])
 
         return jsonify({"fName":"/"+fName})            
 
@@ -81,23 +105,29 @@ def agentUploadInfo():
 
     if request.method == 'POST':
 
-        command="WindowsAgentSetup.exe /s /v\" /qn "  
+        command="cmd /c WindowsAgentSetup.exe /s /v\" /qn "  
 
         for key, value in request.form.items():
             command+=(key+"="+value+" ")
 
         command+="\""
 
-        fName=str(int(time.time()))+".tar.gz"
+        param=str(int(time.time()))
+        fName=param+".tar.gz"
 
         with open(app.config['AGENT_INSTALLER_CONFIG_FILE_PATH'], 'w') as cFile:
 
             cFile.write("Command="+command+"\n")
-            cFile.write("CallbackUrl="+app.config['CallbackUrl']+"\n")
-            cFile.write("Param="+fName+"\n") 
 
-        with tarfile.open(fName, "w:gz") as tar:        
+            cFile.write("CallbackFinishedUrl="+app.config['CallbackFinishedUrl']+"\n")
+            cFile.write("CallbackUnFinishedUrl="+app.config['CallbackUnFinishedUrl']+"\n")
+
+            cFile.write("Param="+param+"\n") 
+
+        with tarfile.open(fName, "w:gz") as tar:  
+
             tar.add(app.config['AGENT_INSTALLER_PATH'], arcname=None,  recursive=True)                     
+            tar.add(app.config['AGENT_BAT_INSTALLER'])
 
         return jsonify({"fName":"/"+fName})            
 
